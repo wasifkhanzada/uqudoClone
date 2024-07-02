@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Practice_android_4" parent="android:Theme.Material.Light.NoActionBar" /> <!-- Base application theme -->
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Transparent navigation bar -->
+        <item name="android:windowTranslucentNavigation">true</item>
+        <!-- Transparent status bar -->
+        <item name="android:windowTranslucentStatus">true</item>
+        <!-- Full-screen mode -->
+        <item name="android:windowFullscreen">true</item>
+        <!-- Control navigation bar color if needed -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Control status bar color if needed -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="ThemeOverlay.Practice_android_4.FullscreenContainer" parent="">
+        <item name="fullscreenBackgroundColor">@color/light_blue_600</item>
+        <item name="fullscreenTextColor">@color/light_blue_A200</item>
+    </style>
+
+</resources>

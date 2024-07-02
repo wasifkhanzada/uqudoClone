@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:theme="@style/ThemeOverlay.Practice_android_4.FullscreenContainer"
+    tools:context=".HomeFragment"
+    android:background="@color/white">
+
+    <!-- Header Section -->
+    <LinearLayout
+        android:id="@+id/header"
+        android:layout_width="wrap_content"
+        android:layout_height="80dp"
+        android:background="@color/white"
+        android:orientation="horizontal"
+        android:padding="20dp"
+        app:layout_constraintBottom_toTopOf="@+id/content_frame"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_gravity="center_vertical"
+            android:contentDescription="@string/header_icon_description"
+            android:src="@drawable/ic_header_icon" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:padding="30dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/welcome_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:fontFamily="sans-serif-black"
+            android:text="@string/main_page_heading"
+            android:textAlignment="center"
+            android:textColor="@color/black"
+            android:textColorLink="@color/secondary"
+            android:textSize="@dimen/main_page_heading"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/welcome_desc_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:fontFamily="sans-serif-medium"
+            android:text="@string/main_page_description"
+            android:textAlignment="center"
+            android:textColor="@color/gray2"
+            android:textColorLink="@color/secondary"
+            android:textSize="@dimen/main_page_description"
+            android:layout_marginTop="10dp"
+            android:typeface="serif"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="280dp"
+            android:layout_marginTop="10dp"
+            android:baselineAligned="false"
+            android:src="@drawable/home_vector" />
+
+
+        <Button
+            android:id="@+id/start_verification"
+            android:layout_width="150dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:backgroundTint="@color/secondary"
+            android:elevation="0dp"
+            android:text="@string/start"
+            android:textColor="@color/white"
+            android:textSize="@dimen/button" />
+    </LinearLayout>
+
+</FrameLayout>

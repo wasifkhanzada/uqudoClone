@@ -1,0 +1,7 @@
+<resources>
+    <dimen name="fab_margin">16dp</dimen>
+    <dimen name="page_title">20sp</dimen>
+    <dimen name="main_page_heading">20dp</dimen>
+    <dimen name="main_page_description">18dp</dimen>
+    <dimen name="button">16dp</dimen>
+</resources>
