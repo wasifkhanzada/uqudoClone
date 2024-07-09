@@ -27,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.example.practice_android_4.camera.CameraService
 import com.example.practice_android_4.databinding.FragmentFaceDetectionBinding
+import com.example.practice_android_4.face_detection.FaceBox
 import com.example.practice_android_4.face_detection.Helper
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
@@ -139,16 +140,12 @@ class FaceDetectionFragment : BaseFragment() {
 
 
     @SuppressLint("UnsafeOptInUsageError")
-    private fun processImageProxy(imageProxy: ImageProxy) {
+    private fun processImageProxy(imageProxy: ImageProxy, bitmap: Bitmap) {
         val inputImage = InputImage.fromMediaImage(imageProxy.image!!, imageProxy.imageInfo.rotationDegrees)
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 val faces = detectFaces(inputImage)
-//                withContext(Dispatchers.Main) {
-                val byteArray = faceDetectionService.imageProxyToByteArray(imageProxy)
-                Log.d("byteArray processImageProxy", byteArray.toString())
-                handleDetectedFaces(faces, imageProxy, byteArray)
-//                }
+                handleDetectedFaces(faces, imageProxy)
             } catch (e: Exception) {
                 Log.e(TAG, "Face detection failed: ${e.message}")
             } finally {
@@ -167,7 +164,7 @@ class FaceDetectionFragment : BaseFragment() {
             }
     }
 
-    private suspend fun handleDetectedFaces(faces: List<Face>, imageProxy: ImageProxy, byteArray: ByteArray) {
+    private suspend fun handleDetectedFaces(faces: List<Face>, imageProxy: ImageProxy) {
 //        withContext(Dispatchers.Main) {
 //            binding.previewViewOverlay.clear()
 //            faces.forEach { face ->
@@ -179,182 +176,236 @@ class FaceDetectionFragment : BaseFragment() {
 //                binding.previewViewOverlay.add(faceBox)
 //            }
 //        }
-        Log.d("byteArray handleDetectedFaces", byteArray.toString())
-        updateOverlayBasedOnFaces(faces, imageProxy, byteArray)
+
+//        Log.d("byteArray handleDetectedFaces", byteArray.toString())
+        updateOverlayBasedOnFaces(faces, imageProxy)
     }
 
-    private suspend fun updateOverlayBasedOnFaces(faces: List<Face>, imageProxy: ImageProxy, byteArray: ByteArray) {
-        var type = ""
-        val bitmap = imageProxy.toBitmap().rotate(270f)
-        val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+    private suspend fun updateOverlayBasedOnFaces(faces: List<Face>, imageProxy: ImageProxy) {
+        var type = FACE_NOT_DETECTED
+
+        // Perform bitmap operations off the main thread
+        val bitmap = withContext(Dispatchers.Default) {
+            imageProxy.toBitmap().rotate(270f)
+        }
+//        val bitmap = imageProxy.toBitmap().rotate(270f)
+
+        val mutableBitmap = withContext(Dispatchers.Default) {
+            bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        }
 
         if (faces.isEmpty()) {
-            type = "FACE_NOT_DETECTED"
+            type = FACE_NOT_DETECTED
         } else {
             for (face in faces) {
-                val boundingBox = faceDetectionService.getBoxRect(
-                    binding.overlayView,
-                    imageProxy.width.toFloat(),
-                    imageProxy.height.toFloat(),
-                    face.boundingBox
-                )
+                val boundingBox = withContext(Dispatchers.Default) {
+                    faceDetectionService.getBoxRect(
+                        binding.overlayView,
+                        imageProxy.width.toFloat(),
+                        imageProxy.height.toFloat(),
+                        face.boundingBox
+                    )
+                }
+                val faceBounds = Rect(face.boundingBox.left, face.boundingBox.top, face.boundingBox.right, face.boundingBox.bottom)
+                val croppedBitmap = withContext(Dispatchers.Default) {
+                    faceDetectionService.cropBitmap(
+                        mutableBitmap,
+                        faceBounds.left,
+                        faceBounds.top,
+                        faceBounds.width(),
+                        faceBounds.height()
+                    )
+                }
+
                 val faceSize = faceDetectionService.getFaceSize(face.boundingBox, imageProxy.width, imageProxy.height)
                 Log.d("FACE_SIZE", faceSize.toString())
-                if (faces.size > 1) {
-                    type = "MULTIPLE_FACES_DETECTED"
-                    break
-                }
 
-                if (!binding.overlayView.isBoundingBoxInsideOval(boundingBox)) {
-                    type = "FACE_IS_OUTSIDE_OVAL"
-                    break
-                }
-
-                if (faceSize < faceDetectionService.faceToFarThreshold) {
-                    type = "FACE_IS_TOO_FAR"
-                    break
-                }
-
-                if (faceSize > faceDetectionService.faceToCloseThreshold) {
-                    type = "FACE_IS_TOO_CLOSE"
-                    break
-                }
-
-                if (!faceDetectionService.isFaceStraight(face, faceDetectionService.angleThreshold)) {
-                    type = "FACE_IS_NOT_STRAIGHT"
-                    break
-                }
-
-                var faceBounds = Rect(face.boundingBox.left, face.boundingBox.top - 60, face.boundingBox.right, face.boundingBox.bottom + 25)
-
-                var croppedBitmap: Bitmap? = faceDetectionService.cropBitmap(
-                    mutableBitmap,
-                    faceBounds.left,
-                    faceBounds.top,
-                    faceBounds.width(),
-                    faceBounds.height()
-                )
-
-                if (croppedBitmap != null) {
-                    if (faceDetectionService.isImageBlurry(croppedBitmap, faceDetectionService.imageBlurryThreshold)) {
-                        type = "FACE_BLURRY"
+                when {
+                    faces.size > 1 -> {
+                        type = MULTIPLE_FACES_DETECTED
+                        handleHoldOnLoading("HIDE")
                         break
                     }
-                    if (faceDetectionService.calculateBitmapBrightness(croppedBitmap) < faceDetectionService.imageBrightnessThreshold) {
-                        type = "LOW_LIGHT_DETECTED"
+
+                    !binding.overlayView.isBoundingBoxInsideOval(boundingBox) -> {
+                        type = FACE_IS_OUTSIDE_OVAL
                         break
                     }
+
+                    faceSize < faceDetectionService.faceToFarThreshold -> {
+                        type = FACE_IS_TOO_FAR
+                        break
+                    }
+
+                    faceSize > faceDetectionService.faceToCloseThreshold -> {
+                        type = FACE_IS_TOO_CLOSE
+                        break
+                    }
+
+                    !faceDetectionService.isFaceStraight(
+                        face,
+                        faceDetectionService.angleThreshold
+                    ) -> {
+                        type = FACE_IS_NOT_STRAIGHT
+                        break
+                    }
+
+                    !faceDetectionService.areEyesOpen(
+                        face,
+                        faceDetectionService.eyeOpenProbabilityThreshold
+                    ) -> {
+                        type = BOTH_EYES_CLOSED
+                        break
+                    }
+
+                    faceDetectionService.isSmiling(
+                        face,
+                        faceDetectionService.smileProbabilityThreshold
+                    ) -> {
+                        type = SMILEY_FACE
+                        break
+                    }
+
+                    else -> {
+
+                        // Show HOLD ON loading
+                        type = HOLD_ON
+                        handleHoldOnLoading("SHOW")
+                        val blurry = withContext(Dispatchers.Default) {
+                            faceDetectionService.isImageBlurry(
+                                croppedBitmap,
+                                faceDetectionService.imageBlurryThreshold
+                            )
+                        }
+                        val isLowLight = withContext(Dispatchers.Default) {
+                            faceDetectionService.calculateBitmapBrightness(
+                                croppedBitmap,
+                                faceDetectionService.imageBrightnessThreshold
+                            )
+                        }
+
+                        type = when {
+                            !isLowLight && !blurry -> ""
+                            isLowLight -> LOW_LIGHT_DETECTED
+                            blurry -> FACE_BLURRY
+                            else -> type // default to previous type
+                        }
+
+                    }
                 }
-
-//                binding.processedImageView.setImageBitmap(croppedBitmap)
-
-                if (!faceDetectionService.areEyesOpen(face, faceDetectionService.eyeOpenProbabilityThreshold)) {
-                    type = "BOTH_EYES_CLOSED"
-                    break
-                }
-
-                if (faceDetectionService.isSmiling(face, faceDetectionService.smileProbabilityThreshold)) {
-                    type = "SMILEY_FACE"
-                    break
-                }
-
-
             }
         }
 
+        if (type != HOLD_ON) {
+            handleHoldOnLoading("HIDE")
+        }
         withContext(Dispatchers.Main) {
-            Log.d("byteArray updateOverlayBasedOnFaces", byteArray.toString())
-
-            handleDetectedFace(type, imageProxy, byteArray)
+            handleDetectedFace(type, imageProxy, bitmap)
         }
     }
 
-    private fun handleDetectedFace(type: String, imageProxy: ImageProxy, byteArray: ByteArray) {
+    private fun viewBitmapOnScreen(bitmap:Bitmap) {
+        binding.processedImageView.setImageBitmap(bitmap)
+    }
+
+    private fun handleHoldOnLoading(type: String) {
+        if(type === "HIDE"){
+            hideHoldOnLoading()
+        } else {
+            showHoldOnLoading()
+        }
+    }
+
+    private fun handleDetectedFace(type: String, imageProxy: ImageProxy, bitmap: Bitmap) {
         Log.d("TYPE", type)
         when (type) {
-            "MULTIPLE_FACES_DETECTED" -> {
+            MULTIPLE_FACES_DETECTED -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_3)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "FACE_NOT_DETECTED" -> {
+            FACE_NOT_DETECTED -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_2)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "LOW_LIGHT_DETECTED" -> {
+            LOW_LIGHT_DETECTED -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_11)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "FACE_IS_OUTSIDE_OVAL" -> {
+            FACE_IS_OUTSIDE_OVAL -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_4)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "FACE_BLURRY" -> {
+            FACE_BLURRY -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_12)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "FACE_IS_TOO_FAR" -> {
+            FACE_IS_TOO_FAR -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_9)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "FACE_IS_TOO_CLOSE" -> {
+            FACE_IS_TOO_CLOSE -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_10)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "FACE_IS_NOT_STRAIGHT" -> {
+            FACE_IS_NOT_STRAIGHT -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_5)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "BOTH_EYES_CLOSED" -> {
+            BOTH_EYES_CLOSED -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_6)
                 binding.overlayView.changeBorderColor(Color.RED)
             }
 
-            "SMILEY_FACE" -> {
+            SMILEY_FACE -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_7)
                 binding.overlayView.changeBorderColor(Color.RED)
+            }
+
+            HOLD_ON -> {
+                binding.infoText.visibility = View.VISIBLE
+                binding.infoText.text = getString(R.string.facial_recognition_label_8)
+                binding.overlayView.changeBorderColor(Color.GREEN)
             }
 
             else -> {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_8)
                 binding.overlayView.changeBorderColor(Color.GREEN)
-                Log.d("byteArray handleDetectedFace", byteArray.toString())
-
-                faceDetectSuccessfully(byteArray)
+                faceDetectSuccessfully(bitmap)
             }
         }
     }
 
-    private fun faceDetectSuccessfully(byteArray: ByteArray) {
-        Log.d("byteArray faceDetectSuccessfully", byteArray.toString())
+    private fun faceDetectSuccessfully(bitmap: Bitmap) {
 
         // Check if the fragment is still attached to its context
         if (isAdded && !isDetached) {
 
             playShotSound()
-
-            // Safely navigate up
-            val selfie = byteArray
+//            val actualBitmap = faceDetectionService.cropBitmapToScreen(bitmap)
             val frontId = arguments?.getByteArray("front_id")
             val backId = arguments?.getByteArray("back_id")
+
+            // Safely navigate up
+            val byteArray = faceDetectionService.convertBitmapToByteArrayUncompressed(bitmap)
 
             val bundle: Bundle = Bundle().apply {
                 if(frontId !== null){
@@ -363,10 +414,10 @@ class FaceDetectionFragment : BaseFragment() {
                 if(backId !== null){
                     putByteArray("back_id", backId)
                 }
-                putByteArray("selfie", selfie)
+                putByteArray("selfie", byteArray)
             }
 
-             findNavController().navigate(R.id.action_FaceDetectionFragment_to_processFragment, bundle)
+            findNavController().navigate(R.id.action_FaceDetectionFragment_to_processFragment, bundle)
 
         } else {
             // Handle the case where the fragment is not attached (optional)
@@ -391,5 +442,18 @@ class FaceDetectionFragment : BaseFragment() {
     companion object {
         private const val CAMERA_REQUEST_CODE = 100
         private val TAG = FaceDetectionFragment::class.simpleName
+
+        private const val FACE_NOT_DETECTED = "FACE_NOT_DETECTED"
+        private const val MULTIPLE_FACES_DETECTED = "MULTIPLE_FACES_DETECTED"
+        private const val FACE_IS_OUTSIDE_OVAL = "FACE_IS_OUTSIDE_OVAL"
+        private const val FACE_IS_TOO_FAR = "FACE_IS_TOO_FAR"
+        private const val FACE_IS_TOO_CLOSE = "FACE_IS_TOO_CLOSE"
+        private const val FACE_IS_NOT_STRAIGHT = "FACE_IS_NOT_STRAIGHT"
+        private const val BOTH_EYES_CLOSED = "BOTH_EYES_CLOSED"
+        private const val SMILEY_FACE = "SMILEY_FACE"
+        private const val FACE_BLURRY = "FACE_BLURRY"
+        private const val LOW_LIGHT_DETECTED = "LOW_LIGHT_DETECTED"
+        private const val HOLD_ON = "HOLD_ON"
+
     }
 }

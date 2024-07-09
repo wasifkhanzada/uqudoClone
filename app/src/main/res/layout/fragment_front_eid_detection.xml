@@ -4,17 +4,20 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:id="@+id/mainFrame"
     android:theme="@style/ThemeOverlay.Practice_android_4.FullscreenContainer"
     tools:context=".FrontEidDetectionFragment">
 
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
+
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        />
 
     <!-- Overlay view -->
     <com.example.practice_android_4.eid_detection.CardOverlayView

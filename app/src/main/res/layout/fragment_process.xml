@@ -45,6 +45,30 @@
                 android:indeterminateTint="@color/white"
                 />
         </LinearLayout>
+
+<!--        <ImageView-->
+<!--            android:id="@+id/selfieImageView"-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="100dp"-->
+<!--            android:layout_marginBottom="16dp"-->
+<!--            android:scaleType="centerCrop"-->
+<!--    />-->
+
+<!--        <ImageView-->
+<!--            android:id="@+id/frontIdImageView"-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="100dp"-->
+<!--            android:layout_marginBottom="16dp"-->
+<!--            android:scaleType="centerCrop"-->
+<!--    />-->
+
+<!--        <ImageView-->
+<!--            android:id="@+id/backIdImageView"-->
+<!--            android:layout_width="match_parent"-->
+<!--            android:layout_height="100dp"-->
+<!--            android:scaleType="centerCrop"-->
+<!--    />-->
+
     </LinearLayout>
 
 

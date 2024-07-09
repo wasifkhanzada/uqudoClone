@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 open class BaseFragment : Fragment() {
 
     private lateinit var loadingContainer: View
+    private lateinit var holdOnLadingContainer: View
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -16,6 +17,7 @@ open class BaseFragment : Fragment() {
     ): View? {
         val view = inflater.inflate(R.layout.fragment_base, container, false)
         loadingContainer = view.findViewById(R.id.loadingContainer)
+        holdOnLadingContainer = view.findViewById(R.id.holdOnLoadingContainer)
         return view
     }
 
@@ -25,5 +27,13 @@ open class BaseFragment : Fragment() {
 
     protected fun hideLoading() {
         loadingContainer.visibility = View.GONE
+    }
+
+    protected fun showHoldOnLoading() {
+        holdOnLadingContainer.visibility = View.VISIBLE
+    }
+
+    protected fun hideHoldOnLoading() {
+        holdOnLadingContainer.visibility = View.GONE
     }
 }

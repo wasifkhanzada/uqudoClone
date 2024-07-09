@@ -12,6 +12,7 @@ import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetector
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import kotlin.math.absoluteValue
 import kotlin.math.ceil
@@ -40,7 +41,7 @@ class Helper {
     val smileProbabilityThreshold = 0.5f // Use Float type for the threshold
     val faceToFarThreshold = 0.15
     val faceToCloseThreshold = 0.19
-    val imageBlurryThreshold = 1000.0
+    val imageBlurryThreshold = 500.0
     val imageBrightnessThreshold = 100
 
     fun setupFaceDetector(): FaceDetector {
@@ -133,7 +134,7 @@ class Helper {
         return data // Return the byte array
     }
 
-    fun calculateBitmapBrightness(bitmap: Bitmap): Double {
+    fun calculateBitmapBrightness(bitmap: Bitmap, threshold: Int): Boolean {
         var totalBrightness = 0.0
         val width = bitmap.width
         val height = bitmap.height
@@ -147,7 +148,7 @@ class Helper {
             }
         }
 
-        return totalBrightness / totalPixels
+        return (totalBrightness / totalPixels) < threshold
     }
 
     fun getFaceContours (face: Face): FaceContours {
@@ -265,6 +266,40 @@ class Helper {
         val bytes = ByteArray(buffer.remaining())
         buffer.get(bytes)
         return bytes
+    }
+
+    fun convertBitmapToByteArrayUncompressed(bitmap: Bitmap): ByteArray {
+        /*
+             compress method takes quality as one of the parameters.
+             For quality, the range of value expected is 0 - 100 where,
+             0 - compress for a smaller size, 100 - compress for max quality.
+            */
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, byteArrayOutputStream)
+        val bitmapData = byteArrayOutputStream.toByteArray()
+        return bitmapData
+
+    }
+
+    /**
+     * Downscale the given bitmap to the specified maximum width while maintaining the aspect ratio.
+     *
+     * @param bitmap The original bitmap to downscale.
+     * @param maxWidth The maximum width of the downscaled bitmap.
+     * @return The downscaled bitmap with the same aspect ratio.
+     */
+    fun downscaleBitmapWithWidth(bitmap: Bitmap, maxWidth: Int): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+
+        // Calculate the aspect ratio
+        val aspectRatio = width.toFloat() / height.toFloat()
+
+        // Calculate the new height maintaining the aspect ratio
+        val newHeight = (maxWidth / aspectRatio).toInt()
+
+        // Create the scaled bitmap
+        return Bitmap.createScaledBitmap(bitmap, maxWidth, newHeight, true)
     }
 
     companion object {
