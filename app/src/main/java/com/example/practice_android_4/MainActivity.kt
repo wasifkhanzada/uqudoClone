@@ -2,21 +2,22 @@ package com.example.practice_android_4
 
 import android.Manifest
 import android.content.Intent
-import android.os.Bundle
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Bundle
+import android.provider.Settings
+import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
 import com.example.practice_android_4.databinding.ActivityMainBinding
-import androidx.activity.result.contract.ActivityResultContracts
-import android.provider.Settings
-import android.view.View
-import androidx.core.app.ActivityCompat
-import androidx.appcompat.app.AlertDialog
 import com.example.practice_android_4.network.RetrofitInstance
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -61,6 +62,7 @@ class MainActivity : AppCompatActivity() {
                 )
 
         RetrofitInstance.init(this)
+
 
     }
 

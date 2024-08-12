@@ -10,6 +10,7 @@ open class BaseFragment : Fragment() {
 
     private lateinit var loadingContainer: View
     private lateinit var holdOnLadingContainer: View
+    private lateinit var scanSuccessfullyContainer: View
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -18,6 +19,7 @@ open class BaseFragment : Fragment() {
         val view = inflater.inflate(R.layout.fragment_base, container, false)
         loadingContainer = view.findViewById(R.id.loadingContainer)
         holdOnLadingContainer = view.findViewById(R.id.holdOnLoadingContainer)
+        scanSuccessfullyContainer = view.findViewById(R.id.scanSuccessfullyContainer)
         return view
     }
 
@@ -36,4 +38,13 @@ open class BaseFragment : Fragment() {
     protected fun hideHoldOnLoading() {
         holdOnLadingContainer.visibility = View.GONE
     }
+
+    protected fun showScanSuccessfully() {
+        scanSuccessfullyContainer.visibility = View.VISIBLE
+    }
+
+    protected fun hideScanSuccessfully() {
+        scanSuccessfullyContainer.visibility = View.GONE
+    }
+
 }

@@ -41,6 +41,30 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/completeLoadingContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:visibility="gone"
+        >
+
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="15dp"
+            android:text="Scan Complete"
+            android:textAlignment="center"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:typeface="serif"
+            />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/loadingContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -51,33 +75,67 @@
         android:visibility="gone">
 
         <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="250dp"
+            android:layout_margin="30dp"
+            android:background="@drawable/semi_transparent_background"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="20dp"
+            >
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="30dp"
+                android:text="Validating Please Wait..."
+                android:textAlignment="center"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:typeface="serif"
+                />
+
+            <ProgressBar
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:indeterminateTint="@color/white"
+                />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/scanSuccessfullyContainer"
         android:layout_width="match_parent"
-        android:layout_height="250dp"
-        android:layout_margin="30dp"
-        android:background="@drawable/semi_transparent_background"
+        android:layout_height="match_parent"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="20dp"
-        >
+        android:background="@android:color/transparent"
+        android:padding="10dp"
+        android:visibility="gone">
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="30dp"
-            android:text="Validating Please Wait..."
-            android:textAlignment="center"
-            android:textColor="@color/white"
-            android:textSize="18sp"
-            android:typeface="serif"
-        />
+            android:layout_height="250dp"
+            android:layout_margin="30dp"
+            android:background="@drawable/semi_transparent_background"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="20dp"
+            >
 
-        <ProgressBar
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_centerInParent="true"
-            android:indeterminateTint="@color/white"
-        />
-    </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="0dp"
+                android:text="Successfully Scan"
+                android:textAlignment="center"
+                android:textColor="@color/green"
+                android:textSize="18sp"
+                android:typeface="serif"
+            />
+
+        </LinearLayout>
     </LinearLayout>
 
 </RelativeLayout>

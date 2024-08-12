@@ -1,16 +1,17 @@
 package com.example.practice_android_4.eid_detection
 
-import android.R.attr.bitmap
 import android.content.res.Resources
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
-import androidx.camera.core.ImageProxy
+import org.opencv.android.Utils
+import org.opencv.core.Core
+import org.opencv.core.CvType
+import org.opencv.core.Mat
+import org.opencv.imgproc.Imgproc
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.pow
@@ -23,27 +24,26 @@ class Helper {
 
     val toFrontDetect = arrayOf("eid-front", "eid-front-old")
     val toBackDetect = arrayOf("eid-back", "eid-back-old")
+
+    private val LOW_LIGHT_THRESHOLD = 150.0 //150.0
+    private val BLUR_THRESHOLD = 700.0
+    private val MOTION_BLUR_THRESHOLD = 0.028
+    private val GLARE_THRESHOLD = 252
+    val INSIDE_TOLERANCE = 90
+    val EID_SCORE = 0.95
+    val IMAGE_PROCESSOR_TARGET_SIZE = 384
     val toFarThreshold = 50
-    val toGlareThreshold = 252
-    val eidScore = 0.95
-    val imageProcessorTargetSize = 384
-    val imageBrightnessThreshold = 110
-    val imageBlurryThreshold = 1250.0
-    val insideTolerance = 80f
-    val motionThreshold = 50
-    fun getBoxRect(overlayView: CardBoxOverlay, imageRectWidth: Float, imageRectHeight: Float, cardBoundingBox: Rect): RectF {
+
+
+
+    fun getBoxRect(overlayView: CardOverlayView, imageRectWidth: Float, imageRectHeight: Float, cardBoundingBox: Rect): RectF {
 
         val scaleX = overlayView.width.toFloat() / imageRectHeight
         val scaleY = overlayView.height.toFloat() / imageRectWidth
         val scale = scaleX.coerceAtLeast(scaleY)
 
-//        overlayView.mScale = scale
-
         val offsetX = (overlayView.width.toFloat() - ceil(imageRectHeight * scale)) / 2.0f
         val offsetY = (overlayView.height.toFloat() - ceil(imageRectWidth * scale)) / 2.0f
-
-//        overlayView.mOffsetX = offsetX
-//        overlayView.mOffsetY = offsetY
 
         val mappedBox = RectF().apply {
             left = cardBoundingBox.left * scale + offsetX
@@ -55,39 +55,6 @@ class Helper {
         Log.d("CardBox", "Mapped RectF: $mappedBox from cardBoundingBox: $cardBoundingBox with scale: $scale and offsets: ($offsetX, $offsetY)")
         return mappedBox
 
-    }
-
-    fun detectGlare(mutableBitmap: Bitmap): Boolean {
-        // Get the image dimensions
-        val width = mutableBitmap.width
-        val height = mutableBitmap.height
-        // Loop through each pixel to find bright spots
-        var flag: Boolean = false
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val pixel = mutableBitmap.getPixel(x, y)
-                val red = Color.red(pixel)
-                val green = Color.green(pixel)
-                val blue = Color.blue(pixel)
-
-
-                // Convert to grayscale
-                val gray = (red + green + blue) / 3
-
-                if(gray > 200) {
-                    Log.d("GLARE", gray.toString())
-                }
-
-
-                // Threshold to find bright spots
-                if (gray > toGlareThreshold) { // Threshold value for bright spots
-                    flag = true
-                    break
-                }
-            }
-        }
-
-        return flag
     }
 
     fun cropToSquare (bitmap: Bitmap): CropSquareBitmap {
@@ -125,152 +92,12 @@ class Helper {
         return Bitmap.createBitmap(originalBitmap, validX, validY, validWidth, validHeight)
     }
 
-    fun calculateBitmapBrightness(bitmap: Bitmap, threshold: Int): Boolean {
-        var totalBrightness = 0.0
-        val width = bitmap.width
-        val height = bitmap.height
-        val totalPixels = width * height
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val pixel = bitmap.getPixel(x, y)
-                val brightness = Color.red(pixel) * 0.299 + Color.green(pixel) * 0.587 + Color.blue(pixel) * 0.114
-                totalBrightness += brightness
-            }
-        }
-        Log.d("(totalBrightness / totalPixels)", (totalBrightness / totalPixels).toString())
-        return (totalBrightness / totalPixels) < threshold
-    }
-
-    fun detectMotionBlur(bitmap: Bitmap): Boolean {
-        val width = bitmap.width
-        val height = bitmap.height
-
-        val sobelX = arrayOf(
-            intArrayOf(-1, 0, 1),
-            intArrayOf(-2, 0, 2),
-            intArrayOf(-1, 0, 1)
-        )
-
-        val sobelY = arrayOf(
-            intArrayOf(-1, -2, -1),
-            intArrayOf(0, 0, 0),
-            intArrayOf(1, 2, 1)
-        )
-
-        var sumX = 0
-        var sumY = 0
-
-        for (x in 1 until width - 1) {
-            for (y in 1 until height - 1) {
-                var pixelX = 0
-                var pixelY = 0
-
-                for (i in -1..1) {
-                    for (j in -1..1) {
-                        val pixel = bitmap.getPixel(x + i, y + j)
-                        val intensity = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3
-
-                        pixelX += intensity * sobelX[i + 1][j + 1]
-                        pixelY += intensity * sobelY[i + 1][j + 1]
-                    }
-                }
-
-                sumX += Math.abs(pixelX)
-                sumY += Math.abs(pixelY)
-            }
-        }
-
-        val edgeMagnitude = Math.sqrt((sumX * sumX + sumY * sumY).toDouble()).toInt()
-        val sharpness = edgeMagnitude / (width * height)
-        Log.d("MOTION_BLUR sharpness", sharpness.toString())
-        // Threshold for determining blur
-        return sharpness < motionThreshold
-    }
-
-    fun isImageBlurry(bitmap: Bitmap, threshold: Double): Boolean {
-        val grayscaleBitmap = bitmap.toGrayscale()
-        val laplacianBitmap = grayscaleBitmap.applyLaplacian()
-        val variance = laplacianBitmap.calculateVariance()
-        Log.d("BLURRY", variance.toString())
-        return variance < threshold
-    }
-
-    private fun Bitmap.toGrayscale(): Bitmap {
-        val width = this.width
-        val height = this.height
-        val grayscaleBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val pixel = this.getPixel(x, y)
-                val gray = (Color.red(pixel) * 0.299 + Color.green(pixel) * 0.587 + Color.blue(pixel) * 0.114).toInt()
-                val grayPixel = Color.rgb(gray, gray, gray)
-                grayscaleBitmap.setPixel(x, y, grayPixel)
-            }
-        }
-
-        return grayscaleBitmap
-    }
-    private fun Bitmap.applyLaplacian(): Bitmap {
-        val kernel = arrayOf(
-            intArrayOf(0, 1, 0),
-            intArrayOf(1, -4, 1),
-            intArrayOf(0, 1, 0)
-        )
-
-        val width = this.width
-        val height = this.height
-        val laplacianBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-
-        for (x in 1 until width - 1) {
-            for (y in 1 until height - 1) {
-                var laplacianValue = 0
-
-                for (i in -1..1) {
-                    for (j in -1..1) {
-                        val pixel = this.getPixel(x + i, y + j)
-                        val gray = Color.red(pixel)
-                        laplacianValue += gray * kernel[i + 1][j + 1]
-                    }
-                }
-
-                val newPixel = 255 - laplacianValue
-                val clampedPixel = Color.rgb(newPixel.coerceIn(0, 255), newPixel.coerceIn(0, 255), newPixel.coerceIn(0, 255))
-                laplacianBitmap.setPixel(x, y, clampedPixel)
-            }
-        }
-
-        return laplacianBitmap
-    }
-    private fun Bitmap.calculateVariance(): Double {
-        val width = this.width
-        val height = this.height
-
-        var sum = 0.0
-        var sumOfSquares = 0.0
-        val totalPixels = width * height
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val pixel = this.getPixel(x, y)
-                val gray = Color.red(pixel)
-                sum += gray
-                sumOfSquares += gray * gray
-            }
-        }
-
-        val mean = sum / totalPixels
-        val meanOfSquares = sumOfSquares / totalPixels
-        return meanOfSquares - mean.pow(2)
-    }
-
     // Function to check if two RectF objects match within a tolerance of 5f
-    fun isRectFMatchWithinTolerance(rect1: RectF, rect2: RectF, tolerance: Float): Boolean {
-        return abs(rect1.left - rect2.left) > tolerance ||
-                abs(rect1.top - rect2.top) > tolerance ||
-                abs(rect1.right - rect2.right) > tolerance ||
-                abs(rect1.bottom - rect2.bottom) > tolerance
+    fun isRectFMatchWithinTolerance(rect1: RectF, rect2: RectF): Boolean {
+        return abs(rect1.left - rect2.left) > INSIDE_TOLERANCE ||
+                abs(rect1.top - rect2.top) > INSIDE_TOLERANCE ||
+                abs(rect1.right - rect2.right) > INSIDE_TOLERANCE ||
+                abs(rect1.bottom - rect2.bottom) > INSIDE_TOLERANCE
     }
 
     fun convertBitmapToByteArrayUncompressed(bitmap: Bitmap): ByteArray {
@@ -327,11 +154,6 @@ class Helper {
 
     }
 
-    fun isCardInsideFrame(card: Rect, frame: RectF): Boolean {
-        return frame.contains(card.left.toFloat(), card.top.toFloat()) &&
-                frame.contains(card.right.toFloat(), card.bottom.toFloat())
-    }
-
     /**
      * Downscale the given bitmap to the specified maximum width while maintaining the aspect ratio.
      *
@@ -353,13 +175,11 @@ class Helper {
         return Bitmap.createScaledBitmap(bitmap, maxWidth, newHeight, true)
     }
 
-
-
-    // Convert bitmap to grayscale
-    private fun toGrayscale2(bitmap: Bitmap): Bitmap {
+    fun isLowLight(bitmap: Bitmap): Boolean {
         val width = bitmap.width
         val height = bitmap.height
-        val grayscaleBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        var sum = 0
+        var pixelCount = 0
 
         for (y in 0 until height) {
             for (x in 0 until width) {
@@ -367,102 +187,91 @@ class Helper {
                 val r = Color.red(pixel)
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
-                val gray = (0.3 * r + 0.59 * g + 0.11 * b).toInt()
-                grayscaleBitmap.setPixel(x, y, Color.rgb(gray, gray, gray))
-            }
-        }
-        return grayscaleBitmap
-    }
-    // Apply a simple Gaussian blur (3x3 kernel)
-    private fun applyGaussianBlur(bitmap: Bitmap): Bitmap {
-        val width = bitmap.width
-        val height = bitmap.height
-        val blurredBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
 
-        val kernel = arrayOf(
-            arrayOf(1, 2, 1),
-            arrayOf(2, 4, 2),
-            arrayOf(1, 2, 1)
-        )
-
-        for (y in 1 until height - 1) {
-            for (x in 1 until width - 1) {
-                var sum = 0
-                var kernelSum = 0
-
-                for (ky in -1..1) {
-                    for (kx in -1..1) {
-                        val pixel = bitmap.getPixel(x + kx, y + ky) and 0xFF
-                        sum += pixel * kernel[ky + 1][kx + 1]
-                        kernelSum += kernel[ky + 1][kx + 1]
-                    }
-                }
-
-                val blurredPixel = sum / kernelSum
-                blurredBitmap.setPixel(x, y, Color.rgb(blurredPixel, blurredPixel, blurredPixel))
+                // Convert the pixel to grayscale using luminance formula
+                val luminance = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+                sum += luminance
+                pixelCount++
             }
         }
 
-        return blurredBitmap
+        val avgLuminance = sum / pixelCount.toFloat()
+        Log.d("avgLuminance", avgLuminance.toString())
+
+        return avgLuminance <= LOW_LIGHT_THRESHOLD
     }
-    // Apply Laplacian operator
-    private fun applyLaplacian2(bitmap: Bitmap): Bitmap {
-        val width = bitmap.width
-        val height = bitmap.height
-        val laplacianBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
 
-        val kernel = arrayOf(
-            arrayOf(0, 1, 0),
-            arrayOf(1, -4, 1),
-            arrayOf(0, 1, 0)
-        )
+    fun isImageBlurry(bitmap: Bitmap): Boolean {
+        val mat = Mat()
+        Utils.bitmapToMat(bitmap, mat)
+        Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGBA2GRAY)
 
-        for (y in 1 until height - 1) {
-            for (x in 1 until width - 1) {
-                var sum = 0
-
-                for (ky in -1..1) {
-                    for (kx in -1..1) {
-                        val pixel = bitmap.getPixel(x + kx, y + ky) and 0xFF
-                        sum += pixel * kernel[ky + 1][kx + 1]
-                    }
-                }
-
-                val laplacianPixel = 128 + sum // Shift to positive range
-                laplacianBitmap.setPixel(x, y, Color.rgb(laplacianPixel, laplacianPixel, laplacianPixel))
-            }
-        }
-
-        return laplacianBitmap
-    }
-    // Calculate variance of the Laplacian
-    private fun calculateVariance2(bitmap: Bitmap): Double {
-        val width = bitmap.width
-        val height = bitmap.height
+        val laplacian = Mat()
+        Imgproc.Laplacian(mat, laplacian, CvType.CV_64F)
+        val laplacianArray = DoubleArray(laplacian.rows() * laplacian.cols())
+        laplacian.get(0, 0, laplacianArray)
         var mean = 0.0
-        var meanSquare = 0.0
+        for (value in laplacianArray) {
+            mean += value.pow(2.0)
+        }
+        mean /= laplacianArray.size
 
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                val pixel = bitmap.getPixel(x, y) and 0xFF
-                mean += pixel
-                meanSquare += pixel.toDouble().pow(2.0)
+        Log.d("mean", mean.toString())
+
+        return mean < BLUR_THRESHOLD
+    }
+
+    fun isImageMotionBlurry(bitmap: Bitmap): Boolean {
+        val mat = Mat()
+        Utils.bitmapToMat(bitmap, mat)
+        Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGBA2GRAY)
+
+        val edges = Mat()
+        Imgproc.Canny(mat, edges, 50.0, 150.0)
+
+        val nonZeroEdges = Core.countNonZero(edges)
+        val totalPixels = mat.rows() * mat.cols()
+
+        val edgeDensity = nonZeroEdges.toDouble() / totalPixels
+
+        Log.d("edgeDensity", edgeDensity.toString())
+
+        return edgeDensity < MOTION_BLUR_THRESHOLD
+    }
+
+    fun isGlareDetect(mutableBitmap: Bitmap): Boolean {
+        // Get the image dimensions
+        val width = mutableBitmap.width
+        val height = mutableBitmap.height
+        // Loop through each pixel to find bright spots
+        var flag: Boolean = false
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                val pixel = mutableBitmap.getPixel(x, y)
+                val red = Color.red(pixel)
+                val green = Color.green(pixel)
+                val blue = Color.blue(pixel)
+
+
+                // Convert to grayscale
+                val gray = (red + green + blue) / 3
+
+//                if(gray > 200) {
+                    Log.d("GLARE", gray.toString())
+//                }
+
+
+                // Threshold to find bright spots
+                if (gray > GLARE_THRESHOLD) { // Threshold value for bright spots
+                    flag = true
+                    break
+                }
             }
         }
 
-        val numPixels = width * height
-        mean /= numPixels
-        meanSquare /= numPixels
+        return flag
+    }
 
-        return meanSquare - mean.pow(2.0)
-    }
-    // Function to detect sharpness
-    fun detectSharpness(bitmap: Bitmap): Double {
-        val grayscaleBitmap = toGrayscale2(bitmap)
-        val blurredBitmap = applyGaussianBlur(grayscaleBitmap)
-        val laplacianBitmap = applyLaplacian2(blurredBitmap)
-        return calculateVariance2(laplacianBitmap)
-    }
     companion object {
         private const val TAG = "EidDetectionHelper"
     }

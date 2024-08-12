@@ -11,12 +11,11 @@
         android:label="@string/home_fragment_label"
         tools:layout="@layout/fragment_home">
         <action
-            android:id="@+id/action_HomeFragment_to_frontEidDetection"
-            app:destination="@id/frontEidDetection" />
+            android:id="@+id/action_HomeFragment_to_eidDetection"
+            app:destination="@id/eidDetection" />
         <action
             android:id="@+id/action_HomeFragment_to_FaceDetectionFragment"
             app:destination="@id/FaceDetectionFragment" />
-
     </fragment>
 
     <fragment
@@ -25,66 +24,23 @@
         android:label="@string/face_detection_fragment_label"
         tools:layout="@layout/fragment_face_detection">
         <action
+            android:id="@+id/action_FaceDetectionFragment_to_eidDetection"
+            app:destination="@id/eidDetection" />
+        <action
             android:id="@+id/action_FaceDetectionFragment_to_HomeFragment"
             app:destination="@id/HomeFragment" />
-        <action
-            android:id="@+id/action_FaceDetectionFragment_to_backEidDetectionFragment"
-            app:destination="@id/backEidDetectionFragment" />
-        <action
-            android:id="@+id/action_FaceDetectionFragment_to_processFragment"
-            app:destination="@id/processFragment" />
-
-<!--        <argument android:name="front_id" app:argType="byteArray" android:defaultValue="@null" />-->
-<!--        <argument android:name="back_id" app:argType="byteArray" android:defaultValue="@null" />-->
-
     </fragment>
     <fragment
-        android:id="@+id/frontEidDetection"
-        android:name="com.example.practice_android_4.FrontEidDetectionFragment"
-        android:label="@string/front_eid_detection_fragment_label"
-        tools:layout="@layout/fragment_front_eid_detection">
+        android:id="@+id/eidDetection"
+        android:name="com.example.practice_android_4.EidDetectionFragment"
+        android:label="@string/eid_detection_fragment_label"
+        tools:layout="@layout/fragment_eid_detection">
         <action
-            android:id="@+id/action_frontEidDetection_to_backEidDetectionFragment"
-            app:destination="@id/backEidDetectionFragment" />
-        <action
-            android:id="@+id/action_frontEidDetection_to_HomeFragment"
+            android:id="@+id/action_eidDetection_to_HomeFragment"
             app:destination="@id/HomeFragment" />
-
-<!--        <argument android:name="front_id" app:argType="byteArray" android:defaultValue="@null"/>-->
-
-    </fragment>
-    <fragment
-        android:id="@+id/backEidDetectionFragment"
-        android:name="com.example.practice_android_4.BackEidDetectionFragment"
-        android:label="@string/back_eid_detection_fragment_label"
-        tools:layout="@layout/fragment_back_eid_detection" >
         <action
-            android:id="@+id/action_backEidDetectionFragment_to_FaceDetectionFragment"
+            android:id="@+id/action_eidDetection_to_FaceDetectionFragment"
             app:destination="@id/FaceDetectionFragment" />
-        <action
-            android:id="@+id/action_backEidDetectionFragment_to_frontEidDetection"
-            app:destination="@id/frontEidDetection" />
-        <action
-            android:id="@+id/action_backEidDetectionFragment_to_processFragment"
-            app:destination="@id/processFragment" />
-
-<!--        <argument android:name="front_id" app:argType="byteArray" android:defaultValue="@null"/>-->
-<!--        <argument android:name="back_id" app:argType="byteArray" android:defaultValue="@null"/>-->
-
-    </fragment>
-
-    <fragment
-        android:id="@+id/processFragment"
-        android:name="com.example.practice_android_4.ProcessFragment"
-        android:label="@string/process_fragment_label"
-        tools:layout="@layout/fragment_process" >
-
-        <action android:id="@+id/action_processFragment_to_HomeFragment" app:destination="@id/HomeFragment" />
-
-<!--        <argument android:name="front_id" app:argType="byteArray" android:defaultValue="@null"/>-->
-<!--        <argument android:name="back_id" app:argType="byteArray" android:defaultValue="@null"/>-->
-<!--        <argument android:name="selfie" app:argType="byteArray" android:defaultValue="@null"/>-->
-
     </fragment>
 
 </navigation>

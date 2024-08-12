@@ -32,11 +32,6 @@
         android:layout_height="match_parent"
         android:layout_gravity="center" />
 
-    <com.example.practice_android_4.face_detection.FaceContourView
-        android:id="@+id/faceContourView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
     <LinearLayout
         android:id="@+id/header"
         android:layout_width="match_parent"
