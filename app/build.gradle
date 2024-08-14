@@ -1,15 +1,19 @@
 
 plugins {
-    alias(libs.plugins.androidApplication)
+    // alias(libs.plugins.androidApplication)
+alias(libs.plugins.androidLibrary)
     alias(libs.plugins.jetbrainsKotlinAndroid)
 }
+
+apply plugin: 'maven-publish'
+
 
 android {
     namespace 'com.example.practice_android_4'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.practice_android_4"
+        // applicationId "com.example.practice_android_4"
         minSdk 24
         targetSdk 34
         versionCode 1
@@ -104,3 +108,13 @@ dependencies {
     debugImplementation libs.androidx.ui.tooling
     debugImplementation libs.androidx.ui.test.manifest
 }
+
+publishing {
+    publications {
+        aar(MavenPublication) {
+            groupId = 'com.example.practice_android_4'
+            artifactId = 'practice-android-lib'
+            version = '1.0.0'
+            artifact("$buildDir/outputs/aar/${project.name}-release.aar")
+        }
+    }
