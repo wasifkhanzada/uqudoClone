@@ -6,47 +6,34 @@ import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
-import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.face.Face
-import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetector
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import org.opencv.android.Utils
+import org.opencv.core.Core
+import org.opencv.core.CvType
+import org.opencv.core.Mat
+import org.opencv.imgproc.Imgproc
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import kotlin.math.absoluteValue
 import kotlin.math.ceil
 import kotlin.math.pow
 
-data class FaceContours(
-    val face: List<PointF>,
-    val leftEyebrowTop: List<PointF>,
-    val leftEyebrowBottom: List<PointF>,
-    val rightEyebrowTop: List<PointF>,
-    val rightEyebrowBottom: List<PointF>,
-    val leftEye: List<PointF>,
-    val rightEye: List<PointF>,
-    val upperLipTop: List<PointF>,
-    val upperLipBottom: List<PointF>,
-    val lowerLipTop: List<PointF>,
-    val lowerLipBottom: List<PointF>,
-    val noseBridge: List<PointF>,
-    val noseBottom: List<PointF>
-)
-
 class Helper {
-
-    val angleThreshold = 10.0 // Adjust this threshold as needed
-    val eyeOpenProbabilityThreshold = 0.6f // Typically, a probability > 0.5 indicates open eyes
-    val smileProbabilityThreshold = 0.5f // Use Float type for the threshold
-    val faceToFarThreshold = 0.15
-    val faceToCloseThreshold = 0.19
-    val imageBlurryThreshold = 500.0
-    val imageBrightnessThreshold = 100
+    private val ANGLE_THRESHOLD = 10.0
+    private val TOO_FAR_THRESHOLD = 0.15
+    private val TOO_CLOSE_THRESHOLD = 0.19
+    private val EYE_OPEN_THRESHOLD = 0.6f
+    private val SMILE_THRESHOLD = 0.5f
+    private val LOW_LIGHT_THRESHOLD = 100.0
+    private val BLUR_THRESHOLD = 100.0
+    private val MOTION_BLUR_THRESHOLD = 0.025
 
     fun setupFaceDetector(): FaceDetector {
         val options = FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
             .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
             .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
@@ -72,28 +59,56 @@ class Helper {
     }
 
     // Function to check if the face is straight based on Euler angles
-    fun isFaceStraight(face: Face, threshold: Double): Boolean {
+    fun isFaceStraight(face: Face): Boolean {
         // Check if all Euler angles are within the defined threshold
-        return (face.headEulerAngleX.absoluteValue < threshold
-                && face.headEulerAngleY.absoluteValue < threshold
-                && face.headEulerAngleZ.absoluteValue < threshold)
+        return (face.headEulerAngleX.absoluteValue < ANGLE_THRESHOLD
+                && face.headEulerAngleY.absoluteValue < ANGLE_THRESHOLD
+                && face.headEulerAngleZ.absoluteValue < ANGLE_THRESHOLD)
     }
 
     // Function to check if both eyes are open based on the eye open probability
-    fun areEyesOpen(face: Face, threshold: Float): Boolean {
+    fun areEyesOpen(face: Face): Boolean {
         val leftEyeOpen = face.leftEyeOpenProbability ?: 0.0f
         val rightEyeOpen = face.rightEyeOpenProbability ?: 0.0f
 
         // Check if both eyes are open based on the defined threshold
-        return (leftEyeOpen > threshold && rightEyeOpen > threshold)
+        return (leftEyeOpen > EYE_OPEN_THRESHOLD && rightEyeOpen > EYE_OPEN_THRESHOLD)
+    }
+
+    fun areEyesStraight(face: Face, leftEye: PointF, rightEye: PointF): Boolean {
+        val leftEyeOpen = face.leftEyeOpenProbability ?: return false
+        val rightEyeOpen = face.rightEyeOpenProbability ?: return false
+
+        // Ensure both eyes are open
+        if (leftEyeOpen < 0.5 || rightEyeOpen < 0.5) {
+            return false
+        }
+
+        // Calculate the angle between the eyes
+        val eyeDeltaX = rightEye.x - leftEye.x
+        val eyeDeltaY = rightEye.y - leftEye.y
+        val angle = Math.toDegrees(Math.atan2(eyeDeltaY.toDouble(), eyeDeltaX.toDouble()))
+
+        Log.d("Angle", "Angle: $angle")
+
+        // Check if the angle is within a reasonable range (e.g., -10 to 10 degrees)
+        return angle in -10.0..10.0
     }
 
     // Function to check if the mouth is open or smiling based on the probabilities
-    fun isSmiling(face: Face, smileThreshold: Float): Boolean {
+    fun isSmiling(face: Face): Boolean {
         val smileProbability = face.smilingProbability ?: 0.0f
         Log.d("Smile", "Smile probability: $smileProbability")
         // Check if either the mouth is open or the face is smiling based on the defined thresholds
-        return smileProbability > smileThreshold
+        return smileProbability > SMILE_THRESHOLD
+    }
+
+    fun isFaceTooFar(faceSize: Double): Boolean {
+        return faceSize < TOO_FAR_THRESHOLD
+    }
+
+    fun isFaceTooClose(faceSize: Double): Boolean {
+        return faceSize > TOO_CLOSE_THRESHOLD
     }
 
     fun getBoxRect(overlay: OvalOverlayView, imageRectWidth: Float, imageRectHeight: Float, faceBoundingBox: Rect): RectF {
@@ -126,127 +141,6 @@ class Helper {
         }
     }
 
-    // Helper function to convert ByteBuffer to ByteArray
-    private fun ByteBuffer.toByteArray(): ByteArray {
-        rewind()    // Rewind the buffer to zero
-        val data = ByteArray(remaining())
-        get(data)   // Copy the buffer into a byte array
-        return data // Return the byte array
-    }
-
-    fun calculateBitmapBrightness(bitmap: Bitmap, threshold: Int): Boolean {
-        var totalBrightness = 0.0
-        val width = bitmap.width
-        val height = bitmap.height
-        val totalPixels = width * height
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val pixel = bitmap.getPixel(x, y)
-                val brightness = Color.red(pixel) * 0.299 + Color.green(pixel) * 0.587 + Color.blue(pixel) * 0.114
-                totalBrightness += brightness
-            }
-        }
-
-        return (totalBrightness / totalPixels) < threshold
-    }
-
-    fun getFaceContours (face: Face): FaceContours {
-        val contours = FaceContours(
-                face.allContours.find { it.faceContourType == FaceContour.FACE }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.LEFT_EYEBROW_TOP }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.LEFT_EYEBROW_BOTTOM }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.RIGHT_EYEBROW_TOP }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.RIGHT_EYEBROW_BOTTOM }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.LEFT_EYE }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.RIGHT_EYE }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.UPPER_LIP_TOP }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.UPPER_LIP_BOTTOM }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.LOWER_LIP_TOP }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.LOWER_LIP_BOTTOM }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.NOSE_BRIDGE }?.points ?: emptyList(),
-        face.allContours.find { it.faceContourType == FaceContour.NOSE_BOTTOM }?.points ?: emptyList()
-        )
-        return contours
-    }
-
-    fun isImageBlurry(bitmap: Bitmap, threshold: Double): Boolean {
-        val grayscaleBitmap = bitmap.toGrayscale()
-        val laplacianBitmap = grayscaleBitmap.applyLaplacian()
-        val variance = laplacianBitmap.calculateVariance()
-        Log.d("BLURRY", variance.toString())
-        return variance < threshold
-    }
-
-    private fun Bitmap.toGrayscale(): Bitmap {
-        val width = this.width
-        val height = this.height
-        val grayscaleBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val pixel = this.getPixel(x, y)
-                val gray = (Color.red(pixel) * 0.299 + Color.green(pixel) * 0.587 + Color.blue(pixel) * 0.114).toInt()
-                val grayPixel = Color.rgb(gray, gray, gray)
-                grayscaleBitmap.setPixel(x, y, grayPixel)
-            }
-        }
-
-        return grayscaleBitmap
-    }
-    private fun Bitmap.applyLaplacian(): Bitmap {
-        val kernel = arrayOf(
-            intArrayOf(0, 1, 0),
-            intArrayOf(1, -4, 1),
-            intArrayOf(0, 1, 0)
-        )
-
-        val width = this.width
-        val height = this.height
-        val laplacianBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-
-        for (x in 1 until width - 1) {
-            for (y in 1 until height - 1) {
-                var laplacianValue = 0
-
-                for (i in -1..1) {
-                    for (j in -1..1) {
-                        val pixel = this.getPixel(x + i, y + j)
-                        val gray = Color.red(pixel)
-                        laplacianValue += gray * kernel[i + 1][j + 1]
-                    }
-                }
-
-                val newPixel = 255 - laplacianValue
-                val clampedPixel = Color.rgb(newPixel.coerceIn(0, 255), newPixel.coerceIn(0, 255), newPixel.coerceIn(0, 255))
-                laplacianBitmap.setPixel(x, y, clampedPixel)
-            }
-        }
-
-        return laplacianBitmap
-    }
-    private fun Bitmap.calculateVariance(): Double {
-        val width = this.width
-        val height = this.height
-
-        var sum = 0.0
-        var sumOfSquares = 0.0
-        val totalPixels = width * height
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val pixel = this.getPixel(x, y)
-                val gray = Color.red(pixel)
-                sum += gray
-                sumOfSquares += gray * gray
-            }
-        }
-
-        val mean = sum / totalPixels
-        val meanOfSquares = sumOfSquares / totalPixels
-        return meanOfSquares - mean.pow(2)
-    }
-
     fun cropBitmap(originalBitmap: Bitmap, x: Int, y: Int, width: Int, height: Int): Bitmap {
         // Ensure x and y are within bounds
         val validX = Math.max(0, x)
@@ -260,14 +154,13 @@ class Helper {
         return Bitmap.createBitmap(originalBitmap, validX, validY, validWidth, validHeight)
     }
 
-    fun imageProxyToByteArray(image: ImageProxy): ByteArray {
-        val planes = image.planes
-        val buffer = planes[0].buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
-        return bytes
+    // Helper function to convert ByteBuffer to ByteArray
+    private fun ByteBuffer.toByteArray(): ByteArray {
+        rewind()    // Rewind the buffer to zero
+        val data = ByteArray(remaining())
+        get(data)   // Copy the buffer into a byte array
+        return data // Return the byte array
     }
-
     fun convertBitmapToByteArrayUncompressed(bitmap: Bitmap): ByteArray {
         /*
              compress method takes quality as one of the parameters.
@@ -302,7 +195,72 @@ class Helper {
         return Bitmap.createScaledBitmap(bitmap, maxWidth, newHeight, true)
     }
 
+    fun isLowLight(bitmap: Bitmap): Boolean {
+        val width = bitmap.width
+        val height = bitmap.height
+        var sum = 0
+        var pixelCount = 0
+
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val pixel = bitmap.getPixel(x, y)
+                val r = Color.red(pixel)
+                val g = Color.green(pixel)
+                val b = Color.blue(pixel)
+
+                // Convert the pixel to grayscale using luminance formula
+                val luminance = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+                sum += luminance
+                pixelCount++
+            }
+        }
+
+        val avgLuminance = sum / pixelCount.toFloat()
+        Log.d("avgLuminance", avgLuminance.toString())
+
+        return avgLuminance <= LOW_LIGHT_THRESHOLD
+    }
+
+    fun isImageBlurry(bitmap: Bitmap): Boolean {
+        val mat = Mat()
+        Utils.bitmapToMat(bitmap, mat)
+        Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGBA2GRAY)
+
+        val laplacian = Mat()
+        Imgproc.Laplacian(mat, laplacian, CvType.CV_64F)
+        val laplacianArray = DoubleArray(laplacian.rows() * laplacian.cols())
+        laplacian.get(0, 0, laplacianArray)
+        var mean = 0.0
+        for (value in laplacianArray) {
+            mean += value.pow(2.0)
+        }
+        mean /= laplacianArray.size
+
+        Log.d("mean", mean.toString())
+
+        return mean < BLUR_THRESHOLD
+    }
+
+    fun isImageMotionBlurry(bitmap: Bitmap): Boolean {
+        val mat = Mat()
+        Utils.bitmapToMat(bitmap, mat)
+        Imgproc.cvtColor(mat, mat, Imgproc.COLOR_RGBA2GRAY)
+
+        val edges = Mat()
+        Imgproc.Canny(mat, edges, 50.0, 150.0)
+
+        val nonZeroEdges = Core.countNonZero(edges)
+        val totalPixels = mat.rows() * mat.cols()
+
+        val edgeDensity = nonZeroEdges.toDouble() / totalPixels
+
+        Log.d("edgeDensity", edgeDensity.toString())
+
+        return edgeDensity < MOTION_BLUR_THRESHOLD
+    }
+
     companion object {
+
         private const val TAG = "FaceDetectionHelper"
     }
 }

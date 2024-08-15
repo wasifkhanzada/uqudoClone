@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.View
 
 open class FrameDimension(val left: Float, val top: Float, val right: Float, val bottom: Float, val width: Float, val height: Float)
@@ -56,6 +57,7 @@ class CardOverlayView @JvmOverloads constructor(
 
     fun getFrameDimension(): RectF {
         val dimension = frameDimension()
+        Log.d("frameDimension", "${dimension.width} ${dimension.height}")
         return RectF(dimension.left, dimension.top, dimension.right, dimension.bottom)
     }
 
@@ -68,6 +70,7 @@ class CardOverlayView @JvmOverloads constructor(
 
     // Method to check if a bounding box is inside the oval
     fun isBoundingBoxInsideFrame(boundingBox: RectF): Boolean {
+        Log.d("isBoundingBoxInsideFrame", "$frameRect, $boundingBox")
         return frameRect.contains(boundingBox)
     }
 

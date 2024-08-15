@@ -13,12 +13,16 @@ import android.graphics.Rect
 import android.graphics.YuvImage
 import android.media.Image
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.Toolbar
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageProxy
@@ -26,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.example.practice_android_4.camera.CameraService
+import com.example.practice_android_4.common.CommonHelper
 import com.example.practice_android_4.databinding.FragmentFaceDetectionBinding
 import com.example.practice_android_4.face_detection.FaceBox
 import com.example.practice_android_4.face_detection.Helper
@@ -39,6 +44,15 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import com.example.practice_android_4.network.RetrofitInstance
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
+import org.json.JSONException
+import org.json.JSONObject
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 class FaceDetectionFragment : BaseFragment() {
 
@@ -46,10 +60,11 @@ class FaceDetectionFragment : BaseFragment() {
     private val binding get() = _binding!!
     private lateinit var cameraService: CameraService
     private lateinit var faceDetectionService: Helper
+    private lateinit var commonHelper: CommonHelper
     private var lensFacing = CameraSelector.LENS_FACING_FRONT
     private lateinit var faceDetector: FaceDetector
 
-    private val apiService by lazy { RetrofitInstance.apiService }
+    private val appPackage by lazy { RetrofitInstance.appPackage }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         _binding = FragmentFaceDetectionBinding.inflate(inflater, container, false)
@@ -85,6 +100,8 @@ class FaceDetectionFragment : BaseFragment() {
     private fun setupOtherServices() {
         // Initialize Helper service
         faceDetectionService = Helper()
+        commonHelper = CommonHelper(requireContext())
+
     }
 
     private fun initializeCameraService() {
@@ -126,23 +143,15 @@ class FaceDetectionFragment : BaseFragment() {
         val imageBytes = out.toByteArray()
         return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
     }
-
     private fun Bitmap.rotate(degrees: Float): Bitmap {
         val matrix = Matrix().apply { postRotate(degrees) }
         return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
     }
 
-    fun Bitmap.flip(): Bitmap {
-        val m = Matrix()
-        m.preScale(-1f, 1f)
-        return Bitmap.createBitmap(this, 0, 0, width, height, m, false)
-    }
-
-
     @SuppressLint("UnsafeOptInUsageError")
     private fun processImageProxy(imageProxy: ImageProxy, bitmap: Bitmap) {
-        val inputImage = InputImage.fromMediaImage(imageProxy.image!!, imageProxy.imageInfo.rotationDegrees)
-        CoroutineScope(Dispatchers.Default).launch {
+     val inputImage = InputImage.fromMediaImage(imageProxy.image!!, imageProxy.imageInfo.rotationDegrees)
+        viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val faces = detectFaces(inputImage)
                 handleDetectedFaces(faces, imageProxy)
@@ -156,12 +165,8 @@ class FaceDetectionFragment : BaseFragment() {
 
     private suspend fun detectFaces(inputImage: InputImage): List<Face> = suspendCoroutine { continuation ->
         faceDetector.process(inputImage)
-            .addOnSuccessListener { faces ->
-                continuation.resume(faces)
-            }
-            .addOnFailureListener { e ->
-                continuation.resumeWithException(e)
-            }
+            .addOnSuccessListener { faces -> continuation.resume(faces) }
+            .addOnFailureListener { e -> continuation.resumeWithException(e) }
     }
 
     private suspend fun handleDetectedFaces(faces: List<Face>, imageProxy: ImageProxy) {
@@ -176,147 +181,146 @@ class FaceDetectionFragment : BaseFragment() {
 //                binding.previewViewOverlay.add(faceBox)
 //            }
 //        }
-
-//        Log.d("byteArray handleDetectedFaces", byteArray.toString())
         updateOverlayBasedOnFaces(faces, imageProxy)
     }
 
-    private suspend fun updateOverlayBasedOnFaces(faces: List<Face>, imageProxy: ImageProxy) {
-        var type = FACE_NOT_DETECTED
+    private var alertShown = false
+    private fun showBlockingAlert(message: String) {
+        if (alertShown) return
+        val dialog = AlertDialog.Builder(requireContext())
+            .setMessage(message)
+            .setCancelable(false)
+            .show()
+        // Auto-close the dialog after 5 seconds
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (dialog.isShowing) {
+                dialog.dismiss()
+                alertShown = false
+            }
+        }, 5000)
+        alertShown = true
+    }
 
+
+    private var isProcessing = false
+
+
+
+    private suspend fun updateOverlayBasedOnFaces(faces: List<Face>, imageProxy: ImageProxy) {
+
+        if(isProcessing) return
+
+        if(alertShown) return
         // Perform bitmap operations off the main thread
         val bitmap = withContext(Dispatchers.Default) {
             imageProxy.toBitmap().rotate(270f)
         }
-//        val bitmap = imageProxy.toBitmap().rotate(270f)
 
         val mutableBitmap = withContext(Dispatchers.Default) {
             bitmap.copy(Bitmap.Config.ARGB_8888, true)
         }
 
-        if (faces.isEmpty()) {
-            type = FACE_NOT_DETECTED
-        } else {
-            for (face in faces) {
-                val boundingBox = withContext(Dispatchers.Default) {
-                    faceDetectionService.getBoxRect(
-                        binding.overlayView,
-                        imageProxy.width.toFloat(),
-                        imageProxy.height.toFloat(),
-                        face.boundingBox
-                    )
+        if(faces.isNotEmpty()) {
+
+            var face = faces.last()
+
+            val boundingBox = withContext(Dispatchers.Default) {
+                faceDetectionService.getBoxRect(
+                    binding.overlayView,
+                    imageProxy.width.toFloat(),
+                    imageProxy.height.toFloat(),
+                    face.boundingBox
+                )
+            }
+
+            val faceBounds = Rect(face.boundingBox.left, face.boundingBox.top, face.boundingBox.right, face.boundingBox.bottom)
+            val faceCroppedBitmap = withContext(Dispatchers.Default) {
+            faceDetectionService.cropBitmap(
+                mutableBitmap,
+                faceBounds.left,
+                faceBounds.top,
+                faceBounds.width(),
+                faceBounds.height()
+            )
+        }
+            val faceSize = faceDetectionService.getFaceSize(face.boundingBox, imageProxy.width, imageProxy.height)
+
+            when {
+                faces.size > 1 -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(MULTIPLE_FACES_DETECTED)
+                    }
                 }
-                val faceBounds = Rect(face.boundingBox.left, face.boundingBox.top, face.boundingBox.right, face.boundingBox.bottom)
-                val croppedBitmap = withContext(Dispatchers.Default) {
-                    faceDetectionService.cropBitmap(
-                        mutableBitmap,
-                        faceBounds.left,
-                        faceBounds.top,
-                        faceBounds.width(),
-                        faceBounds.height()
-                    )
+
+                !binding.overlayView.isBoundingBoxInsideOval(boundingBox) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(FACE_IS_OUTSIDE_OVAL)
+                    }
                 }
 
-                val faceSize = faceDetectionService.getFaceSize(face.boundingBox, imageProxy.width, imageProxy.height)
-                Log.d("FACE_SIZE", faceSize.toString())
-
-                when {
-                    faces.size > 1 -> {
-                        type = MULTIPLE_FACES_DETECTED
-                        handleHoldOnLoading("HIDE")
-                        break
+                faceDetectionService.isFaceTooFar(faceSize) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(FACE_IS_TOO_FAR)
                     }
+                }
 
-                    !binding.overlayView.isBoundingBoxInsideOval(boundingBox) -> {
-                        type = FACE_IS_OUTSIDE_OVAL
-                        break
+                faceDetectionService.isFaceTooClose(faceSize)-> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(FACE_IS_TOO_CLOSE)
                     }
+                }
 
-                    faceSize < faceDetectionService.faceToFarThreshold -> {
-                        type = FACE_IS_TOO_FAR
-                        break
+                !faceDetectionService.isFaceStraight(face) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(FACE_IS_NOT_STRAIGHT)
                     }
+                }
 
-                    faceSize > faceDetectionService.faceToCloseThreshold -> {
-                        type = FACE_IS_TOO_CLOSE
-                        break
+                !faceDetectionService.areEyesOpen(face) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(BOTH_EYES_CLOSED)
                     }
+                }
 
-                    !faceDetectionService.isFaceStraight(
-                        face,
-                        faceDetectionService.angleThreshold
-                    ) -> {
-                        type = FACE_IS_NOT_STRAIGHT
-                        break
+                faceDetectionService.isSmiling(face) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(SMILEY_FACE)
                     }
+                }
 
-                    !faceDetectionService.areEyesOpen(
-                        face,
-                        faceDetectionService.eyeOpenProbabilityThreshold
-                    ) -> {
-                        type = BOTH_EYES_CLOSED
-                        break
+                faceDetectionService.isLowLight(faceCroppedBitmap) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(LOW_LIGHT_DETECTED)
                     }
+                }
 
-                    faceDetectionService.isSmiling(
-                        face,
-                        faceDetectionService.smileProbabilityThreshold
-                    ) -> {
-                        type = SMILEY_FACE
-                        break
+                faceDetectionService.isImageBlurry(faceCroppedBitmap) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(FACE_BLURRY)
                     }
+                }
+                faceDetectionService.isImageMotionBlurry(bitmap) -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace(FACE_BLURRY)
+                    }
+                }
 
-                    else -> {
-
-                        // Show HOLD ON loading
-                        type = HOLD_ON
-                        handleHoldOnLoading("SHOW")
-                        val blurry = withContext(Dispatchers.Default) {
-                            faceDetectionService.isImageBlurry(
-                                croppedBitmap,
-                                faceDetectionService.imageBlurryThreshold
-                            )
-                        }
-                        val isLowLight = withContext(Dispatchers.Default) {
-                            faceDetectionService.calculateBitmapBrightness(
-                                croppedBitmap,
-                                faceDetectionService.imageBrightnessThreshold
-                            )
-                        }
-
-                        type = when {
-                            !isLowLight && !blurry -> ""
-                            isLowLight -> LOW_LIGHT_DETECTED
-                            blurry -> FACE_BLURRY
-                            else -> type // default to previous type
-                        }
-
+                else -> {
+                    return withContext(Dispatchers.Main) {
+                        handleDetectedFace("", bitmap)
                     }
                 }
             }
-        }
 
-        if (type != HOLD_ON) {
-            handleHoldOnLoading("HIDE")
-        }
-        withContext(Dispatchers.Main) {
-            handleDetectedFace(type, imageProxy, bitmap)
-        }
-    }
-
-    private fun viewBitmapOnScreen(bitmap:Bitmap) {
-        binding.processedImageView.setImageBitmap(bitmap)
-    }
-
-    private fun handleHoldOnLoading(type: String) {
-        if(type === "HIDE"){
-            hideHoldOnLoading()
         } else {
-            showHoldOnLoading()
+            return withContext(Dispatchers.Main) {
+                handleDetectedFace(FACE_NOT_DETECTED)
+            }
         }
+
     }
 
-    private fun handleDetectedFace(type: String, imageProxy: ImageProxy, bitmap: Bitmap) {
+    private fun handleDetectedFace(type: String, bitmap: Bitmap? = null) {
         Log.d("TYPE", type)
         when (type) {
             MULTIPLE_FACES_DETECTED -> {
@@ -389,41 +393,118 @@ class FaceDetectionFragment : BaseFragment() {
                 binding.infoText.visibility = View.VISIBLE
                 binding.infoText.text = getString(R.string.facial_recognition_label_8)
                 binding.overlayView.changeBorderColor(Color.GREEN)
-                faceDetectSuccessfully(bitmap)
+                if (bitmap != null) {
+                    faceDetectSuccessfully(bitmap)
+                }
             }
         }
     }
 
     private fun faceDetectSuccessfully(bitmap: Bitmap) {
+        playShotSound()
+        val byteArray = faceDetectionService.convertBitmapToByteArrayUncompressed(bitmap)
+        showLoading()
+        cameraService.stopCamera()
+        compareFaces(byteArray)
+    }
 
-        // Check if the fragment is still attached to its context
-        if (isAdded && !isDetached) {
 
-            playShotSound()
-//            val actualBitmap = faceDetectionService.cropBitmapToScreen(bitmap)
-            val frontId = arguments?.getByteArray("front_id")
-            val backId = arguments?.getByteArray("back_id")
+    private fun compareFaces(selfieByteArray: ByteArray) {
 
-            // Safely navigate up
-            val byteArray = faceDetectionService.convertBitmapToByteArrayUncompressed(bitmap)
+        val token = arguments?.getString("token") ?: ""
 
-            val bundle: Bundle = Bundle().apply {
-                if(frontId !== null){
-                    putByteArray("front_id", frontId)
+        // Prepare file parts
+        val selfiePart = selfieByteArray.let {
+            val selfieRequestBody = it.toRequestBody("image/jpeg".toMediaTypeOrNull())
+            Log.d("SELFIE_REQUEST_BODY", selfieRequestBody.toString())
+            MultipartBody.Part.createFormData("selfie", "selfie.jpeg", selfieRequestBody)
+        }
+
+        val call = appPackage.compareFaces(
+            authorization = "Bearer $token",
+            selfie = selfiePart
+        )
+
+        call.enqueue(object : Callback<ResponseBody> {
+            override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
+                if (response.isSuccessful) {
+                    handleSuccessfulResponse(response)
+                } else {
+                    logAndReportError("Unsuccessful response", response)
                 }
-                if(backId !== null){
-                    putByteArray("back_id", backId)
-                }
-                putByteArray("selfie", byteArray)
             }
 
-            findNavController().navigate(R.id.action_FaceDetectionFragment_to_processFragment, bundle)
-
-        } else {
-            // Handle the case where the fragment is not attached (optional)
-            Log.w(TAG, "Fragment is not attached to context. Cannot proceed with faceDetectSuccessfully.")
+            override fun onFailure(call: Call<ResponseBody>, t: Throwable) {
+                logAndReportError("Network request failed", throwable = t)
+            }
+        })
+    }
+    private fun handleSuccessfulResponse(response: Response<ResponseBody>) {
+        response.body()?.string()?.let { jsonData ->
+            try {
+                parseAndHandleResponse(jsonData)
+            } catch (e: JSONException) {
+                logAndReportError("Error parsing response JSON", exception = e)
+            }
+        } ?: run {
+            logAndReportError("Response body is null")
         }
     }
+    private fun parseAndHandleResponse(jsonData: String) {
+        val resObject = JSONObject(jsonData).apply {
+            Log.d("resObject", toString())
+        }
+        if (resObject.getBoolean("error")) {
+            val errMessage = resObject.getString("message")
+            logAndReportError("Response error: $errMessage", jsonObject = resObject)
+        } else {
+            val token = resObject.getJSONObject("data").getString("token")
+            Log.d("processIdCard RESPONSE_SUCCESS", "$resObject $token")
+            // navigate(bundle) // Uncomment and implement if needed
+            onSuccess(token)
+        }
+    }
+    private fun logAndReportError(
+        message: String,
+        response: Response<ResponseBody>? = null,
+        jsonObject: JSONObject? = null,
+        exception: JSONException? = null,
+        throwable: Throwable? = null
+    ) {
+        Log.e("${TAG} ERROR", "$message ${response?.code() ?: ""}")
+        response?.let { Log.e("${TAG} ERROR_RESPONSE", "$response") }
+        jsonObject?.let { Log.e("${TAG} RESPONSE_ERROR", it.toString()) }
+        exception?.let { Log.e("${TAG} JSON_PARSE_ERROR", it.message, it) }
+        throwable?.let { Log.e("${TAG} NETWORK_ERROR", it.message, it) }
+        onFailure(message)
+    }
+
+    private fun onSuccess(token : String) {
+        val scope: Bundle? = arguments
+
+//        if(scope?.getString("scope") === commonHelper.DOCUMENT_OR_FACE_TYPE){
+            // Create another Bundle with data
+            val currentBundle = Bundle().apply {
+                putString("token", token)
+            }
+            findNavController().navigate(R.id.action_FaceDetectionFragment_to_HomeFragment, currentBundle)
+//        } else {
+
+//        }
+
+        // Merge bundles
+//        val mergedBundle = Bundle().apply {
+//            putAll(previousBundle)
+//            putAll(currentBundle)
+//        }
+
+
+    }
+    private fun onFailure(message: String) {
+        commonHelper.showMessage(message)
+        findNavController().navigate(R.id.action_FaceDetectionFragment_to_HomeFragment)
+    }
+
 
 
     override fun onResume() {

@@ -30,18 +30,19 @@
     <string name="facial_recognition_label_11">Low light detected scan in a different position.</string>
     <string name="facial_recognition_label_12">Face is blurry.</string>
 
-    <string name="front_eid_detection_fragment_label">Front Eid</string>
-    <string name="back_eid_detection_fragment_label">Back Eid</string>
+    <string name="eid_detection_fragment_label">Eid Detection</string>
     <string name="front_eid_detection_label_1">Fit to front side of eid in frame.</string>
     <string name="back_eid_detection_label_1">Fit to back side of eid in frame.</string>
-    <string name="eid_detection_label_1">Eid is too far.</string>
+    <string name="eid_detection_label_1">Please move the camera closer to the document.</string>
     <string name="eid_detection_label_2">If there is glare or reflection scan in a different position.</string>
     <string name="eid_detection_label_3">Please fit eid into frame</string>
     <string name="eid_detection_label_4">Hold eid in this position</string>
-    <string name="eid_detection_label_5">Low light detected scan in a different position</string>
-    <string name="eid_detection_label_6">Eid is blurry scan in a different position.</string>
-    <string name="dummy_button">Dummy Button</string>
-    <string name="dummy_content">DUMMY\nCONTENT</string>
+    <string name="eid_detection_label_5">Low lighting condition detected, please ensure good lighting while scanning.</string>
+    <string name="eid_detection_label_6">Blurry image detected. Ensure clean lens and good lighting. Stay still while scanning.</string>
+    <string name="eid_detection_label_info">
+        If there are glare or reflections scan in a different position.
+        Ensure camera lens is clean.
+    </string>
 
     <string name="process_fragment_label">Process Fragment</string>
 

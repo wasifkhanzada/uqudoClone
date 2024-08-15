@@ -9,8 +9,16 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitInstance {
     private lateinit var retrofit: Retrofit
+
     lateinit var apiService: ApiService
         private set
+
+    lateinit var auth: Auth
+        private set
+
+    lateinit var appPackage: AppPackage
+        private set
+
 
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(120, TimeUnit.SECONDS)
@@ -20,7 +28,6 @@ object RetrofitInstance {
 
     fun init(context: Context) {
         val baseUrl = context.getString(R.string.base_url)
-        val client = OkHttpClient.Builder().build()
 
         retrofit =  Retrofit.Builder()
             .baseUrl(baseUrl)
@@ -28,7 +35,11 @@ object RetrofitInstance {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
+        // Initialize each API service
         apiService = retrofit.create(ApiService::class.java)
+        auth = retrofit.create(Auth::class.java)
+        appPackage = retrofit.create(AppPackage::class.java)
+
     }
 }
 
